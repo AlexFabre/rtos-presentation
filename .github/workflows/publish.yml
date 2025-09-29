@@ -1,0 +1,16 @@
+name: Generate Quarto presentation
+
+on:
+  push: {branches: main}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Check licenses
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render Quarto Project
+        uses: quarto-dev/quarto-actions/render@v2
+        with:
+          to: revealjs

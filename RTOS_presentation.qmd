@@ -1,0 +1,331 @@
+---
+title: "RTOS presentation"
+author: "Alex Fabre"
+lang: fr
+format:
+  revealjs:
+    theme: simple
+    auto-stretch: false
+    scrollable: true
+smaller: true
+---
+
+# Introduction
+
+## A quoi sert un RTOS ?
+
+- Permettre d'exectuer plusieurs tâches.
+- Faciliter le dévelopement de châque tâche.
+- Assurer des temps de réponse déterministes.
+
+
+- Assigner des priorités et avoir la certitude du respect des priorités.
+
+## Quand faire du Bare-metal ?
+
+- Contrainte de place (Flash/RAM).
+- Application à fonction unique / basique.
+- Besoin de latence extrèmement faible.
+
+> ex:  
+> - traitement du signal / calcul sur flux de données live.  
+> - controleur safety.
+
+## Le coût du developement ?
+
+Un projet avec RTOS coûte-t-il plus cher ?
+
+- Les RTOS les plus populaires sont libres de droit (FreeRTOS / Zephyr)
+- Un projet bare-metal est peu évolutif dans le temps.
+- Un projet avec RTOS peut etre un peu plus long à mettre en place.
+
+> "learning-curve" de Zephyr assez importante
+> mais bénéfice important sur la maintenabilité et
+> l'évolutivité.
+
+## Comment choisir ?
+
+- Lister les fonctions nécessaires
+
+> Actions logicielles que le mcu doit être en mesure de réaliser
+
+- Ressources HW disponibles
+
+> - périphériques internes asynchrones (IT/DMA).  
+> - chip companion dédié à la crypto ou à la communication BLE.
+
+## Découpage du système en tâches
+
+- Toute fonction qui doit s'executer périodiquement.
+- Toute fonction qui prend du temps à s'executer.
+- Lorsque deux fonction doivent pouvoir etre executés "simultanément".
+
+# Type de tâches
+
+## Tâche périodique
+
+S'execute à une période donnée
+
+> Lire une valeur toutes les 500ms.
+
+Un seul mécanisme d'attente sur un delai fix.
+
+```{.c code-line-numbers="6"}
+periodic_task(void) {
+    while(1) {
+        start = get_time();
+        /* sensor read... */
+        time_spent = get_time() - start;
+        os_wait(500 - time_spent);
+    }
+}
+```
+
+## Tache réactive
+
+S'execute en réaction à un "evenement".
+
+> Envoyer une donnée suite à la reception d'une interruption.
+
+Un seul mécanisme d'attente sur un mécanisme de synchro.
+
+```{.c code-line-numbers="3"}
+event_task(void) {
+    while(1) {
+        os_wait_semaphore(sem, OS_WAIT_FOREVER);
+        /* send data */
+    }
+}
+```
+
+# Ordonancement
+
+## Le scheduler
+
+- S'éxecute pérodiquement
+- Détermine quelle tâche doit s'executer
+- S'occupe des changements de tâche
+
+## Etat d'une tache
+
+Pour savoir quelle tâche doit s'executer et par quell mécanisme de synchro une tâche est bloquée, le scheduler tient à jour un tableau avec les statuts de ses tâches et de tout les mechanismes de synchro.
+
+::: {.panel-tabset}
+
+## FreeRTOS
+
+![[FreeRTOS task states](https://freertos.org/Documentation/02-Kernel/02-Kernel-features/01-Tasks-and-co-routines/02-Task-states)](https://freertos.org/media/2018/tskstate.gif)
+
+## Zephyr
+
+![[Zephyr thread states](https://docs.zephyrproject.org/latest/kernel/services/threads/index.html#thread-states)](https://docs.zephyrproject.org/latest/_images/thread_states.svg)
+
+:::
+
+## Changement de context
+
+- Un changement de context necessite de sauvegarder l’état complet d'une tâche (état des variables, contenu des registres, etc) et de charger le contenu du contexte de la tache suivant.
+- Un changement de contexte met entre quelques centaines et quelques milliers de tick cpu pour s’effectuer selon la compléxité de l'architecture.
+
+## Ordonancement coopératif
+
+Une tâche coopérative s'éxécute jusqu'à ce qu'elle réalise une action qui la bloque (yield / wait / mechanisme de syncro bloquant).
+
+![[zephyr doc: cooperative scheduling](https://docs.zephyrproject.org/latest/kernel/services/scheduling/index.html#cooperative-time-slicing)](https://docs.zephyrproject.org/latest/_images/cooperative.svg)
+
+## Ordonancement préemptif
+
+Une tâche préemptive s'éxecute jusqu'à ce qu'une tâche plus prioritaire devienne prête, ou qu'elle réalise une action qui la bloque (yield / wait / mechanisme de syncro bloquant).
+
+![[zephyr doc: preemptive scheduling](https://docs.zephyrproject.org/latest/kernel/services/scheduling/index.html#preemptive-time-slicing)](https://docs.zephyrproject.org/latest/_images/preemptive.svg)
+
+## Starving - (Situation de famine)
+
+- Une tache coopérative qui ne bloque jamais entraine une situation de famine pour toutes les autres tâches (y compris celle de plus haute priorité).
+- Une tache préemptible qui ne bloque jamais entraine une situation de famine pour toutes les autres tâches de même priorité ou de priorité plus faible.
+
+## Time-slicing - (Partage du temps)
+
+Le `time-slicing` permet au scheduler de périodiquement provoquer un changement de tâche courante, afin de donner du temps d'execution à une autre tâche d'un meme niveau de priorité.
+
+![[zephyr doc: time slicing](https://docs.zephyrproject.org/latest/kernel/services/scheduling/index.html#preemptive-time-slicing)](https://docs.zephyrproject.org/latest/_images/timeslicing.svg)
+
+##
+
+::: {.panel-tabset}
+## FreeRTOS
+
+Valeurs par défaut typiques du fichier [FreeRTOSConfig.h](https://www.freertos.org/Documentation/02-Kernel/03-Supported-devices/02-Customization#:~:text='config'%20Parameters-,configUSE_PREEMPTION,use%20the%20cooperative%20RTOS%20scheduler.):
+
+```{.c}
+#define configUSE_PREEMPTION                                        1
+#define configUSE_TIME_SLICING                                      0
+```
+
+- Toutes les tâches sont préemptibles
+- Pas de partage entre les taches de meme priorité
+
+## Zephyr
+
+Valeurs par défaut typiques du Kconfig:
+
+```{.kconfig}
+CONFIG_NUM_PREEMPT_PRIORITIES=15
+CONFIG_TIMESLICING=y
+```
+
+- L'utilisateur peut créer des taches préemptibles (15 niveaux de priorité disponibles)
+- Le `time-slicing` est activé (partage entre les tâches de meme priorité).
+
+:::
+
+## Round-Robin
+
+Mode d'ordonancement particulier qui s'apparente à un mode préemptif(*), avec partage du temps, où toutes les tâches ont la même priorité. Chaque tâche est garantie d'avoir un temps d'éxécution régulièrement, et les taches s'éxecutent dans le meme ordre.
+
+> (*) la préemption n'a pas vraiment de sens lorsque toutes les tâches ont la même priorité, elle illustre simplement la possibilité pour le scheduler d'interompre la tâche courante, même si cette dernière n'a pas atteint son point bloquant.
+
+## Assignation des priorités
+
+Assigner des priorités permet d’ajuster la réactivité du système.
+
+> Pas de règle universelle: tous les systèmes n’ont pas nécessairement besoin de plusieurs niveau de priorité.
+
+> Le besoin peut venir pendant le développement : Constat d’un manque de réactivité de certaines actions.
+
+*On accordera plus facilement une priorité élevée à une tâche périodique dont le temps d'exécution est rapide et constant.​*
+
+# Mécanismes de synchro
+
+## Sémaphore
+
+Compteur
+
+Assimilable à un signal ou à un distributeur de "jetons".​  
+
+- 1 jeton disponible : Sémaphore binaire​
+- N jetons disponibles : Counting Semaphore​
+
+N’importe qui peut prendre ou délivrer un jeton. Il n’y a pas de notion d'attachement.​
+
+> Indiquer qu’une interruption s’est produite en libérant un jeton.
+
+## Mutex
+
+Sorte de sémaphore binaire avec attachement et gestion des priorités.​
+
+Assimilable à un "jeton" unique ou un totem de parole.​
+
+**Seul son possesseur actuel peut le rendre.​**
+
+*Lorsqu'une tâche A de priorité basse possède le mutex, et qu’une tâche B de priorité élevée le requiert, la priorité de A s'élève temporairement au niveau de B pour le rendre le plus vite possible.​*
+
+> Protéger l’accès à une ressource matérielle (Bus de com)
+
+## Mailbox/Queue
+
+Transport/partage de données entre deux tâches.
+​
+Assimilable à une boîte aux lettres, définie par le type des messages qu’elle accepte et le nombre de messages qu’elle peut contenir.
+
+Opération:
+
+- Mettre un message à la fin ou au début de la queue
+- Lecture en FIFO ou FILO
+- Lecture d’un message sans l’extraire de la queue (peek)​
+
+> Transférer des commandes d’une tâche de com à une tâche exécutive.
+
+## Evénement
+
+Partager un signal entre plusieurs tâches.​
+
+Il représente un drapeau.
+
+Il est souvent caractérisé par un entier sur lequel un masque vient vérifier la valeur d’un bit.
+
+Il permet de réaliser des synchronisations de N vers N.
+
+> Indiquer que chaque tâche a terminé son init à une tâche principale : N vers 1  
+> Signaler que l’init s’est terminé pour débloquer les tâches en attente : 1 vers N
+
+## Notification
+
+Le moyen le plus léger et rapide de synchroniser deux tâches.​
+
+Permet de réaliser des synchronisations de 1 vers 1 sans information ou alors avec transmission d’une information très légère (1 ou 2 mots).
+
+Le destinataire peut être dans l’attente d’une notification, par contre l'expéditeur lui ne peut pas être dans l’attente de la fin de son envoi pour continuer. Il ne sait pas si sa notification a produit l’effet désiré.
+
+> Déclencher une tâche à la réception d’une interruption
+
+# RTOS variants
+
+## FreeRTOS
+
+![](https://upload.wikimedia.org/wikipedia/fr/thumb/e/ee/FreeRTOS_Logo.jpg/330px-FreeRTOS_Logo.jpg){ width=10% }
+
+- RTOS le plus populaire
+- Très léger (quelques fichiers .c/.h)
+- Support la quasi-totalité des mcu du marché
+- Facile a prendre en main
+
+## Zephyr
+
+![](https://raw.githubusercontent.com/zephyrproject-rtos/zephyr/main/doc/_static/images/logo-readme-light.svg){ width=10% }
+
+- RTOS + SDK + set de librairies
+- Maintenu par la fondation Linux
+- Abstraction du HW pour une totale portabilité du code
+- MCU 32bit uniquement
+- Code compilé performant
+- Supporte la quasi-totalité des mcu du marché
+- Learning curve importante
+
+## Riot
+
+![](https://raw.githubusercontent.com/RIOT-OS/RIOT/refs/heads/master/doc/doxygen/src/riot-logo.svg){ width=10% }
+
+- RTOS + set de librairies
+- Maintenu par l'université de Berlin et l'INRIA
+- MCU 8/16/32 bits
+- Diversité de MCU encore limité
+- Focus sur la légèreté et la performance
+
+# Exercices
+
+## Exercice 1
+
+Projet bare-metal sur Nucleo F072
+
+github.com/AlexFabre/led-control-bare-metal
+
+1. Prendre connaissance du README et des questions posées
+2. Lister les différentes portions de code qui fonctionne en parallèle
+3. Identifier la portion de code qui perturbe le bon déroulement du système
+4. Proposer une correction
+5. Implémenter les améliorations demandées
+
+## Exercice 2
+
+Projet FreeRTOS sur Nucleo F072
+
+github.com/AlexFabre/led-control-RTOS
+
+1. Prendre connaissance du README et des questions posées
+2. Lister les différentes portions de code qui fonctionne en parallèle
+3. Identifier la portion de code qui perturbe le bon déroulement du système
+4. Proposer une correction
+5. Implémenter les améliorations demandées
+
+# Annexes
+
+Quelques articles pour approfondir
+
+- Préemption& Cooperation: https://www.zephyrproject.org/what-i-learned-about-zephyr-rtos-threads/
+- Migration bare-metal -> Zephyr: https://www.zephyrproject.org/why-and-how-to-migrate-from-bare-metal-to-zephyr-rtos/
+- Problèmes courants de scheduling
+  - Part 1: https://www.zephyrproject.org/common-multithreading-problems-and-their-fixes/
+  - Part 2: https://www.zephyrproject.org/common-multithreading-problems-and-their-fixes-part-2-producers-consumers-problem/
+  - Part 3: https://www.zephyrproject.org/common-multithreading-problems-and-their-fixes-part-3/
+  - Part 4: https://www.zephyrproject.org/common-multithreading-problems-and-their-fixes-part-4/
