@@ -135,7 +135,7 @@ Une tâche coopérative s'éxécute jusqu'à ce qu'elle réalise une action qui 
 
 ## Ordonancement préemptif
 
-Une tâche préemptive s'éxecute jusqu'à ce qu'une tâche plus prioritaire devienne prête, ou qu'elle réalise une action qui la bloque (yield / wait / mechanisme de syncro bloquant).
+Une tâche préemptible s'éxecute jusqu'à ce qu'une tâche plus prioritaire devienne prête, ou qu'elle réalise une action qui la bloque (yield / wait / mechanisme de syncro bloquant).
 
 ![[zephyr doc: preemptive scheduling](https://docs.zephyrproject.org/latest/kernel/services/scheduling/index.html#preemptive-time-slicing)](https://docs.zephyrproject.org/latest/_images/preemptive.svg)
 
